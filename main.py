@@ -20,22 +20,60 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.command()
+async def teetimestable(ctx, number_of_players: str, date_min: str, date_max: str, time_min: str, time_max: str):
+    tee_times = await get_all_tee_times_date_time(courses, number_of_players, date_min, date_max, time_min, time_max)
+    if tee_times:
+        tee_times = remove_link_from_tee_times(tee_times)
+        number_of_rows_to_send = 10
+        rows_by = math.ceil(len(tee_times)/number_of_rows_to_send)
+        for i in range(rows_by):
+            row_start = i * number_of_rows_to_send
+            row_end = row_start + number_of_rows_to_send
+            if (row_end > len(tee_times)):
+                row_end = len(tee_times) - 1
+            print(tabulate_tee_times(tee_times[row_start:row_end], True))
+            table = tabulate_tee_times(tee_times[row_start:row_end], True)
+            await ctx.send(f"```{table}```")
+    else:
+        await ctx.send(f"No tee times available from date {date_min} to {date_max} and between times {time_min} to {time_max}.")
+
+@bot.command()
+async def teetimesembed(ctx, number_of_players: str, date_min: str, date_max: str, time_min: str, time_max: str):
+    tee_times = await get_all_tee_times_date_time(courses, number_of_players, date_min, date_max, time_min, time_max)
+    if tee_times:
+        for tee_time in tee_times:
+            embed = discord.Embed(title="Tee Time Available!", url=tee_time[6], color=0x00ff00)
+            embed.add_field(name="Course", value=tee_time[0], inline=False)
+            embed.add_field(name="Date", value=tee_time[1], inline=False)
+            embed.add_field(name="Time", value=tee_time[2], inline=False)
+            format_string = f"Course: {tee_time[0]}\rDate: {tee_time[1]}\rTime: {tee_time[2]}"           
+            message = await ctx.send(embed=embed)
+        check_tee_times.stop()
+    else:
+        await ctx.send(f"No tee times available from date {date_min} to {date_max} and between times {time_min} to {time_max}.")
+
+@bot.command()
 async def teetimes(ctx, number_of_players: str, date_min: str, date_max: str, time_min: str, time_max: str):
     tee_times = await get_all_tee_times_date_time(courses, number_of_players, date_min, date_max, time_min, time_max)
-    
-    number_of_rows_to_send = 20
-    rows_by = math.ceil(len(tee_times)/number_of_rows_to_send)
-    for i in range(rows_by):
-        row_start = i * number_of_rows_to_send
-        row_end = row_start + number_of_rows_to_send
-        if (row_end > len(tee_times)):
-            row_end = len(tee_times) - 1
-        print(tabulate_tee_times(tee_times[row_start:row_end], True))
-        table = tabulate_tee_times(tee_times[row_start:row_end], True)
-        await ctx.send(f"```{table}```")
+    channel = await bot.fetch_channel(channel_id)
+    if tee_times:
+        message = await ctx.send(f":golf::man_golfing:")
+        thread = await message.create_thread(name="Tee Time")
+        for tee_time in tee_times:
+            await thread.send(f"----------------------------------------")
+            await thread.send(tee_time[6])
+            del tee_time[6]
+            table = tabulate_tee_times([tee_time], True)
+            format_string = f"Course: {tee_time[0]}\rDate: {tee_time[1]}\rTime: {tee_time[2]}"
+            await thread.send(f"```{format_string}```")
+            await thread.send(f"----------------------------------------")
+        check_tee_times.stop()
+    else:
+        await channel.send(f"No tee times available from date {date_min} to {date_max} and between times {time_min} to {time_max}.")
 
 @bot.command()
 async def teetimerequest(ctx, number_of_players: str, date_min: str, date_max: str, time_min: str, time_max: str):
+    check_tee_times.stop()
     check_tee_times.start(number_of_players, date_min, date_max, time_min, time_max)
     await ctx.send(f"Will check for open spots at that date and time.")
 
@@ -45,22 +83,16 @@ async def check_tee_times(number_of_players: str, date_min: str, date_max: str, 
     tee_times = await get_all_tee_times_date_time(courses, number_of_players, date_min, date_max, time_min, time_max)
     channel = await bot.fetch_channel(channel_id)
     if tee_times:
-        message = await channel.send(f"TEE TIME BABY")
+        message = await channel.send(f"@here :golf::man_golfing:")
         thread = await message.create_thread(name="Tee Time")
         for tee_time in tee_times:
             await thread.send(f"----------------------------------------")
             await thread.send(tee_time[6])
             del tee_time[6]
             table = tabulate_tee_times([tee_time], True)
-            # embed = discord.Embed(title="Tee Time Available!", url=tee_time[6], color=0x00ff00)
-            # embed.add_field(name="Course", value=tee_time[0], inline=False)
-            # embed.add_field(name="Date", value=tee_time[1], inline=False)
-            # embed.add_field(name="Time", value=tee_time[2], inline=False)
             format_string = f"Course: {tee_time[0]}\rDate: {tee_time[1]}\rTime: {tee_time[2]}"
-            # Send the table in a Discord message
             await thread.send(f"```{format_string}```")
             await thread.send(f"----------------------------------------")
-            # await channel.send(f"@here```{table}```")
         check_tee_times.stop()
     else:
         await channel.send(f"No tee times available from date {date_min} to {date_max} and between times {time_min} to {time_max} will check again in 30 minutes.")
@@ -144,6 +176,13 @@ def tee_time_rates_link_generator(full_course_name: str, course_name: str, playe
         body = f"allCartSelected=true&allRatesSelected=true&courseName={course_name}&date={date_slot}&holesGroupText=18&max_hour=21&max_price=500&min_hour=5&min_price=0&playersGroupText={players_string}&time_slot={time_slot}&transportText=Cart Available"
         body_encoded = urllib.parse.quote_plus(body, safe='=&')
         return f"https://letsgo.golf/recreation-park-golf-course-18/teeTimeRates/at/{full_course_name}?{body_encoded}"
+
+def remove_link_from_tee_times(tee_times: list):
+    new_tee_times = []
+    for tee_time in tee_times:
+        del tee_time[6]
+        new_tee_times.append(tee_time)
+    return new_tee_times
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
