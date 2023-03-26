@@ -1,6 +1,6 @@
 debug.py
 .vscode
-
+*.http
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

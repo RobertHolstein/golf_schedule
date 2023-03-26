@@ -1,0 +1,7 @@
+discord
+discord.py
+pandas
+requests-async
+python-dotenv
+tabulate
+pytz
